@@ -94,7 +94,6 @@ def loadScreen(container):
 
     return loadScreen
 
-
 def trainScreen(container):
     trainScreen = tk.Frame(container, bg="#f0f0f0")  # Light background color
     trainScreen.pack_propagate(False)
@@ -161,14 +160,24 @@ def trainScreen(container):
         activation_functions.append(activation)
 
         # Remove button (disabled for the first layer)
-        def remove_layer(index=row_index):
-            if len(layer_types) > 1:  # Don't allow removal if it's the last layer
-                for widget in layersFrame.grid_slaves(row=index):
-                    widget.grid_forget()
-                layer_types[index] = None
-                neuron_counts[index] = None
-                parameters[index] = None
-                activation_functions[index] = None
+        def remove_layer(index):
+            # Remove the layer at the given index
+            layer_types.pop(index-1)
+            neuron_counts.pop(index-1)
+            parameters.pop(index-1)
+            activation_functions.pop(index-1)
+            remove_buttons.pop(index-1)
+
+            # Destroy all widgets in the row
+            for widget in layersFrame.grid_slaves():
+                if int(widget.grid_info()["row"]) == index:
+                    widget.destroy()
+                elif int(widget.grid_info()["row"]) > index:
+                    widget.grid(row=widget.grid_info()["row"]-1)
+                    # Update the remove button command to pass the new index
+                    if widget in remove_buttons:
+                        widget.config(command=lambda idx=widget.grid_info()["row"]: remove_layer(idx))
+                        
 
         removeLayerButton = tk.Button(layersFrame, text="X", command=lambda idx=row_index: remove_layer(idx), bg="#f00", fg="#fff", width=5)
         removeLayerButton.grid(row=row_index, column=5, padx=5, pady=3)
@@ -204,7 +213,7 @@ def trainScreen(container):
             else:
                 activationDropdown.config(state="normal")
             
-        layerType.trace("w", lambda *args: update_layer_fields())
+        layerType.trace_add("write", lambda *args: update_layer_fields())
 
         # Initialize the parameter field based on the default layer type ("Dense")
         update_layer_fields()
@@ -218,32 +227,34 @@ def trainScreen(container):
     def train_model():
         final_layers = []
         for i in range(len(layer_types)):
-            if layer_types[i] is not None:  # Skip removed layers
-                layer_info = {
-                    "Layer": i + 1,
-                    "Type": layer_types[i].get(),
-                    "Neurons": neuron_counts[i].get(),
-                    "Parameter": parameters[i][1].get() if parameters[i][1].get() != "-" else "N/A",
-                    "Activation": activation_functions[i].get() if layer_types[i].get() in ["Dense", "Conv2D"] else "N/A"
-                }
-                # Check if the layer is valid
-                valid = True
-                if layer_info["Type"] == "Dense":
-                    if not layer_info["Neurons"] or layer_info["Activation"]=="None":
-                        valid = False
-                elif layer_info["Type"] == "Conv2D":
-                    if not layer_info["Neurons"] or not layer_info["Parameter"] or layer_info["Activation"]=="None":
-                        valid = False
-                elif layer_info["Type"] == "MaxPooling2D":
-                    if not layer_info["Parameter"]:
-                        valid = False
-                
-                if not valid:
-                    # Display an error message
-                    tk.messagebox.showerror("Error", f"Fill all required fields")
-                    return
-                final_layers.append(layer_info)
-        print(final_layers)
+            layer_info = {
+                "Layer": i + 1,
+                "Type": layer_types[i].get(),
+                "Neurons": neuron_counts[i].get(),
+                "Parameter": parameters[i][1].get() if parameters[i][1].get() != "-" else "N/A",
+                "Activation": activation_functions[i].get() if layer_types[i].get() in ["Dense", "Conv2D"] else "N/A"
+            }
+            # Check if the layer is valid
+            valid = True
+            if layer_info["Type"] == "Dense":
+                if not layer_info["Neurons"] or layer_info["Activation"]=="None":
+                    valid = False
+            elif layer_info["Type"] == "Conv2D":
+                if not layer_info["Neurons"] or not layer_info["Parameter"] or layer_info["Activation"]=="None":
+                    valid = False
+            elif layer_info["Type"] == "MaxPooling2D":
+                if not layer_info["Parameter"]:
+                    valid = False
+            
+            if not valid:
+                # Display an error message
+                tk.messagebox.showerror("Error", f"Fill all required fields")
+                return
+            final_layers.append(layer_info)
+        
+        container.frames["trainingScreen"] = trainingScreen(container, final_layers)
+        container.frames["trainingScreen"].grid(row=0, column=0, sticky="nsew")
+        showFrame(container.frames["trainingScreen"])
 
 
     trainButton = tk.Button(trainScreen, text="Train", command=train_model, bg="#4CAF50", fg="white", font=("Helvetica", 10, "bold"))
@@ -262,6 +273,39 @@ def trainScreen(container):
 
     return trainScreen
 
+
+def trainingScreen(container, layers):
+    trainingScreen = tk.Frame(container, bg="#f0f0f0")
+    trainingScreen.pack_propagate(False)
+
+    title = tk.Label(
+        trainingScreen, 
+        text="Training Model", 
+        font=("Helvetica", 16, "bold"), 
+        foreground="#333", 
+        bg="#f0f0f0", 
+        width=30, 
+    )
+    title.pack(pady=(10, 20))
+
+    # Display the layers
+    for layer in layers:
+        layer_info = f"Layer {layer['Layer']}: {layer['Type']} - Neurons: {layer['Neurons']} - Parameter: {layer['Parameter']} - Activation: {layer['Activation']}"
+        layer_label = tk.Label(trainingScreen, text=layer_info, bg="#f0f0f0", font=("Helvetica", 10))
+        layer_label.pack(pady=5)
+
+    # Back Button
+    backButton = tk.Button(
+        trainingScreen, 
+        text="Back", 
+        command=lambda: showFrame(container.frames["trainScreen"]),
+        bg="#ddd", 
+        activebackground="#bbb", 
+        font=("Helvetica", 10)
+    )
+    backButton.pack(side="bottom", pady=(20, 10))
+
+    return trainingScreen
 
 def main():
     global root
