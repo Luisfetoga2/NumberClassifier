@@ -3,6 +3,7 @@ from tkinter import ttk
 from tkinter import filedialog
 
 import keras
+from keras.datasets import mnist
 from threading import Thread
 
 def showFrame(frame):
@@ -16,18 +17,35 @@ def mainMenuScreen(container):
                   font=("Helvetica", 16, "bold"), 
                   foreground="black", 
                   width=30)
-    title.pack()
+    title.pack(pady=20)
 
     subtitle = tk.Label(mainMenu, text="Using Tensorflow, Keras & MNIST dataset",
                     font=("Helvetica", 12),
                     foreground="black")
-    subtitle.pack()
+    subtitle.pack(pady=5)
 
     trainButton = tk.Button(mainMenu, text="Train Model", command=lambda: showFrame(container.frames["trainScreen"]))
-    trainButton.pack()
+    trainButton.pack(pady=10)
 
     loadButton = tk.Button(mainMenu, text="Load Model", command=lambda: showFrame(container.frames["loadScreen"]))
-    loadButton.pack()
+    loadButton.pack(pady=10)
+
+    # Image of a random number from the MNIST dataset
+    imageFrame = tk.Frame(mainMenu)
+    imageFrame.pack(pady=20)
+
+    (train_X, train_y), (test_X, test_y) = mnist.load_data()
+    import random
+    random_image = train_X[random.randint(0, len(train_X))]
+
+    canvas = tk.Canvas(imageFrame, width=28*5, height=28*5)
+    canvas.pack()
+
+    for i in range(28):
+        for j in range(28):
+            color = "#%02x%02x%02x" % (random_image[i][j], random_image[i][j], random_image[i][j])
+            canvas.create_rectangle(j*5, i*5, j*5+5, i*5+5, fill=color, outline="")
+
 
     return mainMenu
 
@@ -326,7 +344,6 @@ def trainModel(layers, epochs, progress_bar):
 
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
-    from keras.datasets import mnist
     (train_X, train_y), (test_X, test_y) = mnist.load_data()
 
     train_X = train_X.reshape(-1, 28*28)
