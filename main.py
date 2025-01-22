@@ -1,16 +1,9 @@
-"""import numpy as np
-from keras.datasets import mnist
-
-(train_X, train_y), (test_X, test_y) = mnist.load_data()
-
-train_X = train_X.reshape(-1, 28*28)
-test_X = test_X.reshape(-1, 28*28)
-
-train_X = train_X / 255
-test_X = test_X / 255"""
-
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
+
+import keras
+from threading import Thread
 
 def showFrame(frame):
     frame.tkraise()
@@ -161,22 +154,23 @@ def trainScreen(container):
 
         # Remove button (disabled for the first layer)
         def remove_layer(index):
-            # Remove the layer at the given index
-            layer_types.pop(index-1)
-            neuron_counts.pop(index-1)
-            parameters.pop(index-1)
-            activation_functions.pop(index-1)
-            remove_buttons.pop(index-1)
+            if len(layer_types) > 1:
+                # Remove the layer at the given index
+                layer_types.pop(index-1)
+                neuron_counts.pop(index-1)
+                parameters.pop(index-1)
+                activation_functions.pop(index-1)
+                remove_buttons.pop(index-1)
 
-            # Destroy all widgets in the row
-            for widget in layersFrame.grid_slaves():
-                if int(widget.grid_info()["row"]) == index:
-                    widget.destroy()
-                elif int(widget.grid_info()["row"]) > index:
-                    widget.grid(row=widget.grid_info()["row"]-1)
-                    # Update the remove button command to pass the new index
-                    if widget in remove_buttons:
-                        widget.config(command=lambda idx=widget.grid_info()["row"]: remove_layer(idx))
+                # Destroy all widgets in the row
+                for widget in layersFrame.grid_slaves():
+                    if int(widget.grid_info()["row"]) == index:
+                        widget.destroy()
+                    elif int(widget.grid_info()["row"]) > index:
+                        widget.grid(row=widget.grid_info()["row"]-1)
+                        # Update the remove button command to pass the new index
+                        if widget in remove_buttons:
+                            widget.config(command=lambda idx=widget.grid_info()["row"]: remove_layer(idx))
                         
 
         removeLayerButton = tk.Button(layersFrame, text="X", command=lambda idx=row_index: remove_layer(idx), bg="#f00", fg="#fff", width=5)
@@ -223,6 +217,14 @@ def trainScreen(container):
     addLayerButton = tk.Button(trainScreen, text="Add Layer", command=add_layer)
     addLayerButton.pack(pady=5)
 
+    # Epochs entry
+    epochsLabel = tk.Label(trainScreen, text="Epochs:")
+    epochsLabel.pack()
+
+    epochs = tk.StringVar()
+    epochsEntry = tk.Entry(trainScreen, textvariable=epochs, width=5)
+    epochsEntry.pack()
+
     # Train button function
     def train_model():
         final_layers = []
@@ -251,8 +253,13 @@ def trainScreen(container):
                 tk.messagebox.showerror("Error", f"Fill all required fields")
                 return
             final_layers.append(layer_info)
+
+        # Check if the epochs field is filled
+        if not epochs.get():
+            tk.messagebox.showerror("Error", "Fill the epochs field")
+            return
         
-        container.frames["trainingScreen"] = trainingScreen(container, final_layers)
+        container.frames["trainingScreen"] = trainingScreen(container, final_layers, int(epochs.get()))
         container.frames["trainingScreen"].grid(row=0, column=0, sticky="nsew")
         showFrame(container.frames["trainingScreen"])
 
@@ -273,14 +280,13 @@ def trainScreen(container):
 
     return trainScreen
 
-
-def trainingScreen(container, layers):
+def trainingScreen(container, layers, epochs):
     trainingScreen = tk.Frame(container, bg="#f0f0f0")
     trainingScreen.pack_propagate(False)
 
     title = tk.Label(
         trainingScreen, 
-        text="Training Model", 
+        text="Training Model...", 
         font=("Helvetica", 16, "bold"), 
         foreground="#333", 
         bg="#f0f0f0", 
@@ -288,24 +294,57 @@ def trainingScreen(container, layers):
     )
     title.pack(pady=(10, 20))
 
-    # Display the layers
-    for layer in layers:
-        layer_info = f"Layer {layer['Layer']}: {layer['Type']} - Neurons: {layer['Neurons']} - Parameter: {layer['Parameter']} - Activation: {layer['Activation']}"
-        layer_label = tk.Label(trainingScreen, text=layer_info, bg="#f0f0f0", font=("Helvetica", 10))
-        layer_label.pack(pady=5)
+    progress_bar = ttk.Progressbar(trainingScreen, orient="horizontal", length=300, mode="determinate")
+    progress_bar.pack(pady=(10, 20))
+    progress_bar["maximum"] = epochs
 
-    # Back Button
-    backButton = tk.Button(
-        trainingScreen, 
-        text="Back", 
-        command=lambda: showFrame(container.frames["trainScreen"]),
-        bg="#ddd", 
-        activebackground="#bbb", 
-        font=("Helvetica", 10)
-    )
-    backButton.pack(side="bottom", pady=(20, 10))
+    def train_model_thread():
+        trainModel(layers, epochs, progress_bar)
+        progress_bar["value"] = epochs
+
+    thread = Thread(target=train_model_thread)
+    thread.start()
 
     return trainingScreen
+
+def trainModel(layers, epochs, progress_bar):
+    layerList = []
+
+    for layer in layers:
+        if layer["Type"] == "Dense":
+            layerList.append(keras.layers.Dense(int(layer["Neurons"]), activation=layer["Activation"]))
+        elif layer["Type"] == "Conv2D":
+            layerList.append(keras.layers.Conv2D(int(layer["Neurons"]), kernel_size=int(layer["Parameter"]), activation=layer["Activation"]))
+        elif layer["Type"] == "MaxPooling2D":
+            layerList.append(keras.layers.MaxPooling2D(pool_size=int(layer["Parameter"])))
+        elif layer["Type"] == "Flatten":
+            layerList.append(keras.layers.Flatten())
+
+    model = keras.Sequential(layerList)
+
+    print("Training model...")
+
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+    from keras.datasets import mnist
+    (train_X, train_y), (test_X, test_y) = mnist.load_data()
+
+    train_X = train_X.reshape(-1, 28*28)
+    test_X = test_X.reshape(-1, 28*28)
+
+    train_X = train_X / 255
+    test_X = test_X / 255
+
+    for epoch in range(epochs):
+        model.fit(train_X, train_y, epochs=1, verbose=0)
+        progress_bar["value"] = epoch + 1
+        root.update_idletasks()
+
+    test_loss, test_acc = model.evaluate(test_X, test_y)
+
+    print('\nTest accuracy:', test_acc)
+
+
 
 def main():
     global root
